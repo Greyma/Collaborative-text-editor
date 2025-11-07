@@ -5,6 +5,7 @@
   "scripts": {
     "build": "next build",
     "dev": "next dev",
+    "dev:server": "ts-node server.ts",
     "lint": "eslint .",
     "start": "next start"
   },
@@ -74,6 +75,8 @@
   "devDependencies": {
     "@tailwindcss/postcss": "^4.1.9",
     "@types/node": "^22",
+    "@types/express": "^4.17.21",
+    "ts-node": "^10.9.2",
      "@types/express": "^4.17.21",
     "ts-node": "^10.9.2",
     "@types/react": "^19",
