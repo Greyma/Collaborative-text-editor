@@ -33,7 +33,7 @@ interface UsersListProps {
 }
 
 export default function UsersList({
-  users,
+  users = [],
   currentUserId,
   userCursors = {},
   activities = [],

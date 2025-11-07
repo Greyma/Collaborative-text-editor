@@ -1,139 +1,94 @@
-let socket: WebSocket | null = null
-const messageQueue: any[] = []
-let isConnected = false
+import { io, Socket } from "socket.io-client";
+
+let socket: Socket | null = null;
 
 export type Operation = {
-  id: string
-  type: "insert" | "delete"
-  position: number
-  content?: string
-  length?: number
-  timestamp: number
-  userId: string
-  revision?: number
-}
+  id: string;
+  type: "insert" | "delete";
+  position: number;
+  content?: string;
+  length?: number;
+  timestamp: number;
+  userId: string;
+  revision?: number;
+};
 
-const operationState = {
-  pendingOperations: new Map<string, Operation>(),
-  lastAcknowledgedRevision: 0,
-}
-
-export function initializeSocket(userId: string, userName: string): Promise<WebSocket> {
+export function initializeSocket(userId: string, userName: string): Promise<Socket> {
   return new Promise((resolve, reject) => {
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:"
+    const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || "ws://localhost:3001";
+    
+    socket = io(socketUrl, {
+      query: {
+        userId,
+        userName,
+        documentId: "default-document", // You might want to make this dynamic
+      },
+      transports: ["websocket"],
+    });
 
-    const baseUrl = process.env.NEXT_PUBLIC_SOCKET_URL
-      ? new URL(process.env.NEXT_PUBLIC_SOCKET_URL).host
-      : window.location.host
-
-    const wsUrl = `${protocol}//${baseUrl}/api/ws`
-
-    try {
-      socket = new WebSocket(wsUrl)
-
-      socket.onopen = () => {
-        console.log("[v0] WebSocket connected")
-        isConnected = true
-
-        // Send user info
-        socket?.send(
-          JSON.stringify({
-            type: "join",
-            userId,
-            userName,
-          }),
-        )
-
-        // Flush message queue
-        while (messageQueue.length > 0) {
-          const msg = messageQueue.shift()
-          socket?.send(JSON.stringify(msg))
-        }
-
-        resolve(socket!)
+    socket.on("connect", () => {
+      console.log("[v0] Socket.IO connected successfully");
+      if (socket) {
+        // Emit join event
+        socket.emit("join", {
+          documentId: "default-document",
+          userId,
+          userName,
+          userColor: "#" + Math.floor(Math.random()*16777215).toString(16),
+        });
+        resolve(socket);
       }
+    });
 
-      socket.onerror = (error) => {
-        console.error("[v0] WebSocket error:", error)
-        reject(error)
-      }
+    socket.on("connect_error", (error) => {
+      console.error("[v0] Socket.IO connection error:", error);
+      reject(error);
+    });
 
-      socket.onclose = () => {
-        console.log("[v0] WebSocket disconnected")
-        isConnected = false
-      }
-    } catch (error) {
-      reject(error)
-    }
-  })
+    socket.on("disconnect", () => {
+      console.log("[v0] Socket.IO disconnected");
+    });
+  });
 }
 
 export function sendOperation(operation: Operation) {
-  if (!socket || !isConnected) {
-    messageQueue.push({ type: "operation", data: operation })
-    console.log("[v0] Operation queued, will send when connected")
-    return
-  }
-
-  operationState.pendingOperations.set(operation.id, operation)
-
-  socket.send(
-    JSON.stringify({
-      type: "operation",
-      data: operation,
-    }),
-  )
-
-  console.log("[v0] Operation sent:", operation.id)
+  if (!socket) return;
+  socket.emit("edit", { operation });
 }
 
 export function sendCursorPosition(userId: string, position: number) {
-  if (!socket || !isConnected) return
-
-  socket.send(
-    JSON.stringify({
-      type: "cursor",
-      userId,
-      position,
-    }),
-  )
-}
-
-export function getPendingOperations(): Operation[] {
-  return Array.from(operationState.pendingOperations.values())
-}
-
-export function acknowledgeOperation(operationId: string) {
-  operationState.pendingOperations.delete(operationId)
-  console.log("[v0] Operation acknowledged:", operationId)
+  if (!socket) return;
+  socket.emit("cursor", { userId, position });
 }
 
 export function onMessage(callback: (data: any) => void) {
-  if (!socket) return
-  socket.onmessage = (event) => {
-    try {
-      const data = JSON.parse(event.data)
+  if (!socket) return;
+  
+  // Remove all previous listeners to avoid duplicates
+  socket.off("document-sync");
+  socket.off("users-updated");
+  socket.off("activity-update");
+  socket.off("edit-received");
+  socket.off("cursor-update");
+  socket.off("typing-update");
+  socket.off("chat-received");
 
-      if (data.type === "operationAck") {
-        acknowledgeOperation(data.operationId)
-      }
-
-      callback(data)
-    } catch (error) {
-      console.error("[v0] Failed to parse message:", error)
-    }
-  }
+  socket.on("document-sync", (data) => callback({ type: "documentState", ...data }));
+  socket.on("users-updated", (data) => callback({ type: "userList", ...data }));
+  socket.on("activity-update", (data) => callback({ type: "activity", ...data }));
+  socket.on("edit-received", (data) => callback({ type: "operation", ...data }));
+  socket.on("cursor-update", (data) => callback({ type: "cursor", ...data }));
+  socket.on("typing-update", (data) => callback({ type: "typing", ...data }));
+  socket.on("chat-received", (data) => callback({ type: "chat", ...data }));
 }
 
 export function closeSocket() {
   if (socket) {
-    socket.close()
-    socket = null
-    isConnected = false
-    operationState.pendingOperations.clear()
+    socket.disconnect();
+    socket = null;
   }
 }
 
 export function isSocketConnected(): boolean {
-  return isConnected && socket !== null
+  return socket?.connected || false;
 }

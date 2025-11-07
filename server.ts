@@ -6,6 +6,7 @@ import { createServer } from "http"
 import { Server, type Socket } from "socket.io"
 import cors from "cors"
 import { detectConflict, ConflictLog } from "./lib/conflict-resolver"
+import { applyOperation } from "./lib/operational-transform";
 
 const app = express()
 const httpServer = createServer(app)
@@ -83,7 +84,7 @@ io.on("connection", (socket: Socket) => {
       }
     }
 
-    doc.content = data.content
+    doc.content = applyOperation(doc.content, incomingOp)
     doc.operations.push(incomingOp)
 
     socket.to(documentId).emit("edit-received", {
