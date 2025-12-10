@@ -13,7 +13,7 @@ export type Operation = {
   revision?: number;
 };
 
-export function initializeSocket(userId: string, userName: string): Promise<Socket> {
+export function initializeSocket(userId: string, userName: string, roomId: string = "default-room", documentId: string = "default-document"): Promise<Socket> {
   return new Promise((resolve, reject) => {
     const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || "ws://localhost:3001";
     
@@ -21,7 +21,8 @@ export function initializeSocket(userId: string, userName: string): Promise<Sock
       query: {
         userId,
         userName,
-        documentId: "default-document", // You might want to make this dynamic
+        roomId,
+        documentId,
       },
       transports: ["websocket"],
     });
@@ -31,7 +32,8 @@ export function initializeSocket(userId: string, userName: string): Promise<Sock
       if (socket) {
         // Emit join event
         socket.emit("join", {
-          documentId: "default-document",
+          documentId,
+          roomId,
           userId,
           userName,
           userColor: "#" + Math.floor(Math.random()*16777215).toString(16),
@@ -91,4 +93,10 @@ export function closeSocket() {
 
 export function isSocketConnected(): boolean {
   return socket?.connected || false;
+}
+
+export function listRooms(callback: (rooms: any[]) => void) {
+  if (!socket) return;
+  socket.emit("list-rooms");
+  socket.once("rooms-list", (data) => callback(data.rooms || []));
 }

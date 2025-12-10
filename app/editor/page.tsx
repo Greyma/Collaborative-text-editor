@@ -6,6 +6,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import EditorContent from "@/components/editor-content";
 import UsersList from "@/components/users-list";
 import TypingIndicator from "@/components/typing-indicator";
+import RoomSelector from "@/components/room-selector";
 import { initializeSocket, sendOperation, onMessage, closeSocket, type Operation } from "@/lib/socket-manager";
 import { applyOperation, transformOperation, isValidOperation } from "@/lib/operational-transform";
 
@@ -29,6 +30,7 @@ export default function EditorPage() {
   const [typingUsers, setTypingUsers] = useState<string[]>([]);
   const [userCursors, setUserCursors] = useState<Record<string, CursorData>>({});
   const [isConnected, setIsConnected] = useState(false);
+  const [currentRoom, setCurrentRoom] = useState<string | null>(null);
 
   const operationHistoryRef = useRef<Operation[]>([]);
   const userColorsRef = useRef<Record<string, string>>({});
@@ -40,60 +42,62 @@ export default function EditorPage() {
 
     setCurrentUserId(userId);
     setCurrentUserName(userName);
+  }, []);
 
-    const setupSocket = async () => {
-      try {
-        await initializeSocket(userId, userName);
-        setIsConnected(true);
-        console.log("[v0] Socket initialized successfully");
+  const handleJoinRoom = async (roomId: string) => {
+    setCurrentRoom(roomId);
+    
+    try {
+      await initializeSocket(currentUserId, currentUserName, roomId, "default-document");
+      setIsConnected(true);
+      console.log(`[v0] Socket initialized successfully for room: ${roomId}`);
 
-        onMessage((data) => {
-          console.log("[v0] Received message:", data);
+      onMessage((data) => {
+        console.log("[v0] Received message:", data);
 
-          if (data.type === "documentState") {
-            setDocumentText(data.content);
-            setConnectedUsers(data.users || []);
-            operationHistoryRef.current = data.operations || [];
-            data.users?.forEach((user: User) => {
-              userColorsRef.current[user.id] = user.color;
-            });
-          } else if (data.type === "userList") {
-            setConnectedUsers(data.users || []);
-            data.users?.forEach((user: User) => {
-              if (!userColorsRef.current[user.id]) {
-                userColorsRef.current[user.id] = "#" + Math.floor(Math.random()*16777215).toString(16);
-              }
-            });
-          } else if (data.type === "operation") {
-            handleRemoteOperation(data.operation);
-          } else if (data.type === "cursor") {
-            if (data.userId !== userId) {
-              const cursorData: CursorData = {
-                position: data.position,
-                color: userColorsRef.current[data.userId] || "#3B82F6",
-                name: data.userName || "User",
-              };
-              setUserCursors((prev) => ({
-                ...prev,
-                [data.userId]: cursorData,
-              }));
+        if (data.type === "documentState") {
+          setDocumentText(data.content);
+          setConnectedUsers(data.users || []);
+          operationHistoryRef.current = data.operations || [];
+          data.users?.forEach((user: User) => {
+            userColorsRef.current[user.id] = user.color;
+          });
+        } else if (data.type === "userList") {
+          setConnectedUsers(data.users || []);
+          data.users?.forEach((user: User) => {
+            if (!userColorsRef.current[user.id]) {
+              userColorsRef.current[user.id] = "#" + Math.floor(Math.random()*16777215).toString(16);
             }
-          } else if (data.type === "typing") {
-            if (data.userId !== userId) {
-              setTypingUsers((prev) => (prev.includes(data.userId) ? prev : [...prev, data.userId]));
-              setTimeout(() => {
-                setTypingUsers((prev) => prev.filter((id) => id !== data.userId));
-              }, 1500);
-            }
+          });
+        } else if (data.type === "operation") {
+          handleRemoteOperation(data.operation);
+        } else if (data.type === "cursor") {
+          if (data.userId !== currentUserId) {
+            const cursorData: CursorData = {
+              position: data.position,
+              color: userColorsRef.current[data.userId] || "#3B82F6",
+              name: data.userName || "User",
+            };
+            setUserCursors((prev) => ({
+              ...prev,
+              [data.userId]: cursorData,
+            }));
           }
-        });
-      } catch (error) {
-        console.error("[v0] Failed to initialize socket:", error);
-      }
-    };
+        } else if (data.type === "typing") {
+          if (data.userId !== currentUserId) {
+            setTypingUsers((prev) => (prev.includes(data.userId) ? prev : [...prev, data.userId]));
+            setTimeout(() => {
+              setTypingUsers((prev) => prev.filter((id) => id !== data.userId));
+            }, 1500);
+          }
+        }
+      });
+    } catch (error) {
+      console.error("[v0] Failed to initialize socket:", error);
+    }
+  };
 
-    setupSocket();
-
+  useEffect(() => {
     return () => {
       closeSocket();
     };
@@ -149,6 +153,11 @@ export default function EditorPage() {
     setDocumentText(newText);
   };
 
+  // Show room selector if not connected to a room
+  if (!currentRoom) {
+    return <RoomSelector onJoinRoom={handleJoinRoom} />;
+  }
+
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <div className="border-b border-border p-4 bg-card">
@@ -158,7 +167,7 @@ export default function EditorPage() {
             <p className="text-sm text-muted-foreground mt-1">
               {isConnected ? (
                 <>
-                  <span className="text-green-600 font-semibold">● Connected</span> • {Array.isArray(connectedUsers) ? connectedUsers.length : 0} user(s) editing
+                  <span className="text-green-600 font-semibold">● Connected</span> • Room: <span className="font-medium">{currentRoom}</span> • {Array.isArray(connectedUsers) ? connectedUsers.length : 0} user(s) editing
                 </>
               ) : (
                 <span className="text-yellow-600 font-semibold">● Connecting...</span>
