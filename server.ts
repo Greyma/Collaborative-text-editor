@@ -24,6 +24,11 @@ const rooms: Map<string, Map<string, any>> = new Map()
 const userSessions: Map<string, any> = new Map()
 const conflictLogs: Map<string, ConflictLog> = new Map()
 
+// Helper function to generate room-document key
+function getRoomDocumentKey(roomId: string, documentId: string): string {
+  return `${roomId}:${documentId}`
+}
+
 // Helper function to get or create a room
 function getOrCreateRoom(roomId: string): Map<string, any> {
   if (!rooms.has(roomId)) {
@@ -63,7 +68,7 @@ io.on("connection", (socket: Socket) => {
     console.log(`[Socket] ${userName} joining room ${roomId}, document ${documentId}`)
 
     userSessions.set(socket.id, { documentId, userId, userName, userColor, roomId })
-    const roomDocumentId = `${roomId}:${documentId}`
+    const roomDocumentId = getRoomDocumentKey(roomId, documentId)
     socket.join(roomDocumentId)
 
     const doc = getOrCreateDocument(roomId, documentId)
@@ -112,7 +117,7 @@ io.on("connection", (socket: Socket) => {
     doc.content = applyOperation(doc.content, incomingOp)
     doc.operations.push(incomingOp)
 
-    const roomDocumentId = `${roomId}:${documentId}`
+    const roomDocumentId = getRoomDocumentKey(roomId, documentId)
     socket.to(roomDocumentId).emit("edit-received", {
       userId: session.userId,
       userName: session.userName,
@@ -130,7 +135,7 @@ io.on("connection", (socket: Socket) => {
     const session = userSessions.get(socket.id)
     if (!session) return
 
-    const roomDocumentId = `${session.roomId}:${session.documentId}`
+    const roomDocumentId = getRoomDocumentKey(session.roomId, session.documentId)
     socket.to(roomDocumentId).emit("cursor-update", {
       userId: session.userId,
       userName: session.userName,
@@ -143,7 +148,7 @@ io.on("connection", (socket: Socket) => {
     const session = userSessions.get(socket.id)
     if (!session) return
 
-    const roomDocumentId = `${session.roomId}:${session.documentId}`
+    const roomDocumentId = getRoomDocumentKey(session.roomId, session.documentId)
     socket.to(roomDocumentId).emit("typing-update", {
       userId: session.userId,
       userName: session.userName,
@@ -157,7 +162,7 @@ io.on("connection", (socket: Socket) => {
 
     console.log(`[Socket] Chat from ${session.userName} in room ${session.roomId}`)
 
-    const roomDocumentId = `${session.roomId}:${session.documentId}`
+    const roomDocumentId = getRoomDocumentKey(session.roomId, session.documentId)
     socket.to(roomDocumentId).emit("chat-received", {
       userId: session.userId,
       userName: session.userName,
@@ -180,7 +185,7 @@ io.on("connection", (socket: Socket) => {
       const doc = getOrCreateDocument(session.roomId, session.documentId)
       if (doc) {
         doc.users = doc.users.filter((u: any) => u.id !== session.userId)
-        const roomDocumentId = `${session.roomId}:${session.documentId}`
+        const roomDocumentId = getRoomDocumentKey(session.roomId, session.documentId)
         io.to(roomDocumentId).emit("users-updated", { users: doc.users })
 
         io.to(roomDocumentId).emit("activity-update", {
