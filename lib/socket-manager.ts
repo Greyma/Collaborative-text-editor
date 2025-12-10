@@ -13,7 +13,7 @@ export type Operation = {
   revision?: number;
 };
 
-export function initializeSocket(userId: string, userName: string): Promise<Socket> {
+export function initializeSocket(userId: string, userName: string, roomId: string): Promise<Socket> {
   return new Promise((resolve, reject) => {
     const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || "ws://localhost:3001";
     
@@ -21,17 +21,17 @@ export function initializeSocket(userId: string, userName: string): Promise<Sock
       query: {
         userId,
         userName,
-        documentId: "default-document", // You might want to make this dynamic
+        documentId: roomId,
       },
       transports: ["websocket"],
     });
 
     socket.on("connect", () => {
-      console.log("[v0] Socket.IO connected successfully");
+      console.log(`[Socket] Connected to room: ${roomId}`);
       if (socket) {
         // Emit join event
         socket.emit("join", {
-          documentId: "default-document",
+          documentId: roomId,
           userId,
           userName,
           userColor: "#" + Math.floor(Math.random()*16777215).toString(16),
@@ -41,12 +41,12 @@ export function initializeSocket(userId: string, userName: string): Promise<Sock
     });
 
     socket.on("connect_error", (error) => {
-      console.error("[v0] Socket.IO connection error:", error);
+      console.error("[Socket] Connection error:", error);
       reject(error);
     });
 
     socket.on("disconnect", () => {
-      console.log("[v0] Socket.IO disconnected");
+      console.log("[Socket] Disconnected");
     });
   });
 }
