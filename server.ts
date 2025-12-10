@@ -19,56 +19,81 @@ const io = new Server(httpServer, {
 
 app.use(cors())
 
-const documents: Map<string, any> = new Map()
+// Storage structure: rooms -> documents -> document data
+const rooms: Map<string, Map<string, any>> = new Map()
 const userSessions: Map<string, any> = new Map()
 const conflictLogs: Map<string, ConflictLog> = new Map()
+
+// Helper function to get or create a room
+function getOrCreateRoom(roomId: string): Map<string, any> {
+  if (!rooms.has(roomId)) {
+    rooms.set(roomId, new Map())
+  }
+  return rooms.get(roomId)!
+}
+
+// Helper function to get or create a document in a room
+function getOrCreateDocument(roomId: string, documentId: string): any {
+  const room = getOrCreateRoom(roomId)
+  if (!room.has(documentId)) {
+    room.set(documentId, {
+      content: "",
+      users: [],
+      operations: [],
+      activities: [],
+    })
+  }
+  return room.get(documentId)
+}
 
 io.on("connection", (socket: Socket) => {
   console.log("[Socket] User connected:", socket.id)
 
+  // Get list of available rooms
+  socket.on("list-rooms", () => {
+    const roomsList = Array.from(rooms.keys()).map(roomId => ({
+      id: roomId,
+      userCount: Array.from(userSessions.values()).filter(s => s.roomId === roomId).length,
+    }))
+    socket.emit("rooms-list", { rooms: roomsList })
+  })
+
   socket.on("join", (data) => {
-    const { documentId, userId, userName, userColor } = data
-    console.log(`[Socket] ${userName} joining document ${documentId}`)
+    const { documentId, userId, userName, userColor, roomId = "default-room" } = data
+    console.log(`[Socket] ${userName} joining room ${roomId}, document ${documentId}`)
 
-    userSessions.set(socket.id, { documentId, userId, userName, userColor })
-    socket.join(documentId)
+    userSessions.set(socket.id, { documentId, userId, userName, userColor, roomId })
+    const roomDocumentId = `${roomId}:${documentId}`
+    socket.join(roomDocumentId)
 
-    if (!documents.has(documentId)) {
-      documents.set(documentId, {
-        content: "",
-        users: [],
-        operations: [],
-        activities: [],
-      })
-    }
-
-    const doc = documents.get(documentId)
+    const doc = getOrCreateDocument(roomId, documentId)
     if (!doc.users.find((u: any) => u.id === userId)) {
       doc.users.push({ id: userId, name: userName, color: userColor })
     }
 
     socket.emit("document-sync", { content: doc.content })
-    io.to(documentId).emit("users-updated", { users: doc.users })
+    io.to(roomDocumentId).emit("users-updated", { users: doc.users })
 
     // Broadcast activity
-    io.to(documentId).emit("activity-update", {
+    io.to(roomDocumentId).emit("activity-update", {
       userId,
       userName,
       action: "joined",
     })
 
-    console.log(`[Socket] Document ${documentId} now has ${doc.users.length} users`)
+    console.log(`[Socket] Room ${roomId}, Document ${documentId} now has ${doc.users.length} users`)
   })
 
   socket.on("edit", (data) => {
     const session = userSessions.get(socket.id)
     if (!session) return
 
-    const { documentId } = session
-    const doc = documents.get(documentId)
+    const { documentId, roomId } = session
+    const doc = getOrCreateDocument(roomId, documentId)
     if (!doc) return
 
     const incomingOp = data.operation
+    const conflictKey = `${roomId}:${documentId}`
 
     // Check for conflicts with recent operations
     if (doc.operations.length > 0) {
@@ -76,10 +101,10 @@ io.on("connection", (socket: Socket) => {
       for (const recentOp of recentOps) {
         if (detectConflict(recentOp, incomingOp)) {
           console.log(`[Socket] Conflict detected between operations`)
-          if (!conflictLogs.has(documentId)) {
-            conflictLogs.set(documentId, new ConflictLog())
+          if (!conflictLogs.has(conflictKey)) {
+            conflictLogs.set(conflictKey, new ConflictLog())
           }
-          conflictLogs.get(documentId)?.logConflict(recentOp, incomingOp, "resolved by timestamp")
+          conflictLogs.get(conflictKey)?.logConflict(recentOp, incomingOp, "resolved by timestamp")
         }
       }
     }
@@ -87,13 +112,14 @@ io.on("connection", (socket: Socket) => {
     doc.content = applyOperation(doc.content, incomingOp)
     doc.operations.push(incomingOp)
 
-    socket.to(documentId).emit("edit-received", {
+    const roomDocumentId = `${roomId}:${documentId}`
+    socket.to(roomDocumentId).emit("edit-received", {
       userId: session.userId,
       userName: session.userName,
       operation: incomingOp,
     })
 
-    io.to(documentId).emit("activity-update", {
+    io.to(roomDocumentId).emit("activity-update", {
       userId: session.userId,
       userName: session.userName,
       action: "edited",
@@ -104,7 +130,8 @@ io.on("connection", (socket: Socket) => {
     const session = userSessions.get(socket.id)
     if (!session) return
 
-    socket.to(session.documentId).emit("cursor-update", {
+    const roomDocumentId = `${session.roomId}:${session.documentId}`
+    socket.to(roomDocumentId).emit("cursor-update", {
       userId: session.userId,
       userName: session.userName,
       userColor: session.userColor,
@@ -116,7 +143,8 @@ io.on("connection", (socket: Socket) => {
     const session = userSessions.get(socket.id)
     if (!session) return
 
-    socket.to(session.documentId).emit("typing-update", {
+    const roomDocumentId = `${session.roomId}:${session.documentId}`
+    socket.to(roomDocumentId).emit("typing-update", {
       userId: session.userId,
       userName: session.userName,
       isTyping: data.isTyping,
@@ -127,9 +155,10 @@ io.on("connection", (socket: Socket) => {
     const session = userSessions.get(socket.id)
     if (!session) return
 
-    console.log(`[Socket] Chat from ${session.userName} in ${session.documentId}`)
+    console.log(`[Socket] Chat from ${session.userName} in room ${session.roomId}`)
 
-    socket.to(session.documentId).emit("chat-received", {
+    const roomDocumentId = `${session.roomId}:${session.documentId}`
+    socket.to(roomDocumentId).emit("chat-received", {
       userId: session.userId,
       userName: session.userName,
       userColor: session.userColor,
@@ -138,7 +167,7 @@ io.on("connection", (socket: Socket) => {
     })
 
     // Broadcast to everyone including sender
-    io.to(session.documentId).emit("activity-update", {
+    io.to(roomDocumentId).emit("activity-update", {
       userId: session.userId,
       userName: session.userName,
       action: "message",
@@ -148,17 +177,18 @@ io.on("connection", (socket: Socket) => {
   socket.on("disconnect", () => {
     const session = userSessions.get(socket.id)
     if (session) {
-      const doc = documents.get(session.documentId)
+      const doc = getOrCreateDocument(session.roomId, session.documentId)
       if (doc) {
         doc.users = doc.users.filter((u: any) => u.id !== session.userId)
-        io.to(session.documentId).emit("users-updated", { users: doc.users })
+        const roomDocumentId = `${session.roomId}:${session.documentId}`
+        io.to(roomDocumentId).emit("users-updated", { users: doc.users })
 
-        io.to(session.documentId).emit("activity-update", {
+        io.to(roomDocumentId).emit("activity-update", {
           userId: session.userId,
           userName: session.userName,
           action: "left",
         })
-        console.log(`[Socket] ${session.userName} left document ${session.documentId}`)
+        console.log(`[Socket] ${session.userName} left room ${session.roomId}, document ${session.documentId}`)
       }
     }
     userSessions.delete(socket.id)
