@@ -2,7 +2,7 @@
 
 Un éditeur de texte collaboratif en temps réel construit avec Next.js, Socket.IO, et TypeScript. Cette application permet à plusieurs utilisateurs de modifier simultanément un document dans des salles (rooms) séparées.
 
-## 📋 Table des Matières
+### 📋 Table des Matières
 
 - [Fonctionnalités](#fonctionnalités)
 - [Architecture](#architecture)
