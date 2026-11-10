@@ -33,6 +33,30 @@ export function applyOperation(text: string, operation: Operation): string {
   return text
 }
 
+// Describes any text change as a deletion and/or an insertion at the first differing position.
+export function createOperations(oldText: string, newText: string, userId: string): Operation[] {
+  const maxPrefix = Math.min(oldText.length, newText.length)
+  let prefix = 0
+  while (prefix < maxPrefix && oldText[prefix] === newText[prefix]) prefix++
+
+  const maxSuffix = maxPrefix - prefix
+  let suffix = 0
+  while (suffix < maxSuffix && oldText[oldText.length - 1 - suffix] === newText[newText.length - 1 - suffix]) suffix++
+
+  const deletedLength = oldText.length - prefix - suffix
+  const insertedText = newText.slice(prefix, newText.length - suffix)
+  const timestamp = Date.now()
+  const operations: Operation[] = []
+
+  if (deletedLength > 0) {
+    operations.push({ id: `${userId}-${timestamp}-delete`, type: "delete", position: prefix, length: deletedLength, timestamp, userId })
+  }
+  if (insertedText) {
+    operations.push({ id: `${userId}-${timestamp}-insert`, type: "insert", position: prefix, content: insertedText, timestamp, userId })
+  }
+  return operations
+}
+
 export function transformOperation(op1: Operation, op2: Operation): Operation {
   // Transform op1 against op2 using operational transformation principles
   // Ensures both clients converge to the same state

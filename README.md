@@ -336,6 +336,16 @@ Obtenir les informations d'une salle spécifique
 
 ## 🔌 WebSocket Events
 
+| Fonctionnalité  | Code côté serveur            | Code côté client               |
+|-----------------|------------------------------|--------------------------------|
+| Connexion       | `io.on('connection', ...)`   | `io('url')`                    |
+| Envoi global    | `io.emit()`                  | `socket.emit()`                |
+| Réception       | `socket.on()`                | `socket.on()`                  |
+| Broadcast       | `socket.broadcast.emit()`    | -                              |
+| Rooms           | `socket.join()`, `io.to(room)`| `socket.emit('join-room', ...)`|
+| Déconnexion     | `socket.on('disconnect')`    | `socket.on('disconnect')`      |
+
+
 ### Events Client → Serveur
 
 | Event | Description | Données |

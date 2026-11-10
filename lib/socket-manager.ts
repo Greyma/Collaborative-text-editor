@@ -1,6 +1,8 @@
 import { io, Socket } from "socket.io-client";
 
 let socket: Socket | null = null;
+let instanceKey: string | null = null;
+let instanceReady: Promise<Socket> | null = null;
 
 export type Operation = {
   id: string;
@@ -14,10 +16,20 @@ export type Operation = {
 };
 
 export function initializeSocket(userId: string, userName: string, roomId: string): Promise<Socket> {
-  return new Promise((resolve, reject) => {
+  // Singleton: the same user asking for the same room gets the existing instance back.
+  const key = `${roomId}:${userId}`;
+  if (socket && instanceKey === key && instanceReady) {
+    return instanceReady;
+  }
+
+  // A client owns a single connection: never leave a previous one alive in a room.
+  closeSocket();
+  instanceKey = key;
+
+  instanceReady = new Promise((resolve, reject) => {
     const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || "ws://localhost:3001";
-    
-    socket = io(socketUrl, {
+
+    const newSocket = io(socketUrl, {
       query: {
         userId,
         userName,
@@ -25,30 +37,39 @@ export function initializeSocket(userId: string, userName: string, roomId: strin
       },
       transports: ["websocket"],
     });
+    socket = newSocket;
 
-    socket.on("connect", () => {
+    let hasConnected = false;
+
+    newSocket.on("connect", () => {
       console.log(`[Socket] Connected to room: ${roomId}`);
-      if (socket) {
-        // Emit join event
-        socket.emit("join", {
-          documentId: roomId,
-          userId,
-          userName,
-          userColor: "#" + Math.floor(Math.random()*16777215).toString(16),
-        });
-        resolve(socket);
-      }
+      hasConnected = true;
+      // Emit join event
+      newSocket.emit("join", {
+        documentId: roomId,
+        userId,
+        userName,
+        userColor: "#" + Math.floor(Math.random()*16777215).toString(16),
+      });
+      resolve(newSocket);
     });
 
-    socket.on("connect_error", (error) => {
+    newSocket.on("connect_error", (error) => {
       console.error("[Socket] Connection error:", error);
+      if (hasConnected) return; // Socket.IO keeps retrying after a dropped connection.
+
+      // The join failed: stop retrying, otherwise it would join the room later on its own.
+      newSocket.disconnect();
+      if (socket === newSocket) closeSocket();
       reject(error);
     });
 
-    socket.on("disconnect", () => {
+    newSocket.on("disconnect", () => {
       console.log("[Socket] Disconnected");
     });
   });
+
+  return instanceReady;
 }
 
 export function sendOperation(operation: Operation) {
@@ -87,6 +108,8 @@ export function closeSocket() {
     socket.disconnect();
     socket = null;
   }
+  instanceKey = null;
+  instanceReady = null;
 }
 
 export function isSocketConnected(): boolean {

@@ -8,7 +8,8 @@ import UsersList from "@/components/users-list";
 import TypingIndicator from "@/components/typing-indicator";
 import RoomSelector from "@/components/room-selector";
 import { initializeSocket, sendOperation, onMessage, closeSocket, type Operation } from "@/lib/socket-manager";
-import { applyOperation, transformOperation, isValidOperation } from "@/lib/operational-transform";
+import { applyOperation, createOperations, transformOperation, isValidOperation } from "@/lib/operational-transform";
+import { getUserId } from "@/lib/user-id";
 import { Button } from "@/components/ui/button";
 
 interface User {
@@ -33,12 +34,19 @@ export default function EditorPage() {
   const [userCursors, setUserCursors] = useState<Record<string, CursorData>>({});
   const [isConnected, setIsConnected] = useState(false);
   const [hasJoinedRoom, setHasJoinedRoom] = useState(false);
+  const [isJoining, setIsJoining] = useState(false);
 
+  const joiningRef = useRef(false);
   const operationHistoryRef = useRef<Operation[]>([]);
   const userColorsRef = useRef<Record<string, string>>({});
 
   const handleJoinRoom = async (roomId: string, userName: string) => {
-    const userId = Math.random().toString(36).substr(2, 9);
+    // A ref, because clicks can land before the isJoining state has re-rendered.
+    if (joiningRef.current) return;
+    joiningRef.current = true;
+    setIsJoining(true);
+
+    const userId = getUserId(userName);
 
     setCurrentUserId(userId);
     setCurrentUserName(userName);
@@ -92,6 +100,9 @@ export default function EditorPage() {
       });
     } catch (error) {
       console.error("[Editor] Failed to join room:", error);
+    } finally {
+      joiningRef.current = false;
+      setIsJoining(false);
     }
   };
 
@@ -126,35 +137,8 @@ export default function EditorPage() {
 
   const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const newText = e.target.value;
-    const oldText = documentText;
-    const cursorPos = e.currentTarget.selectionStart;
 
-    let op: Operation | null = null;
-
-    if (newText.length > oldText.length) {
-      const diff = newText.length - oldText.length;
-      const insertedText = newText.substring(Math.max(0, cursorPos - diff), cursorPos);
-      op = {
-        id: `${currentUserId}-${Date.now()}`,
-        type: "insert",
-        position: cursorPos - insertedText.length,
-        content: insertedText,
-        timestamp: Date.now(),
-        userId: currentUserId,
-      };
-    } else if (newText.length < oldText.length) {
-      const deletedLength = oldText.length - newText.length;
-      op = {
-        id: `${currentUserId}-${Date.now()}`,
-        type: "delete",
-        position: cursorPos,
-        length: deletedLength,
-        timestamp: Date.now(),
-        userId: currentUserId,
-      };
-    }
-
-    if (op) {
+    for (const op of createOperations(documentText, newText, currentUserId)) {
       sendOperation(op);
       operationHistoryRef.current.push(op);
     }
@@ -163,7 +147,7 @@ export default function EditorPage() {
   };
 
   if (!hasJoinedRoom) {
-    return <RoomSelector onJoinRoom={handleJoinRoom} />;
+    return <RoomSelector onJoinRoom={handleJoinRoom} isJoining={isJoining} />;
   }
 
   return (
