@@ -33,11 +33,18 @@ export default function EditorPage() {
   const [userCursors, setUserCursors] = useState<Record<string, CursorData>>({});
   const [isConnected, setIsConnected] = useState(false);
   const [hasJoinedRoom, setHasJoinedRoom] = useState(false);
+  const [isJoining, setIsJoining] = useState(false);
 
+  const joiningRef = useRef(false);
   const operationHistoryRef = useRef<Operation[]>([]);
   const userColorsRef = useRef<Record<string, string>>({});
 
   const handleJoinRoom = async (roomId: string, userName: string) => {
+    // A ref, because clicks can land before the isJoining state has re-rendered.
+    if (joiningRef.current) return;
+    joiningRef.current = true;
+    setIsJoining(true);
+
     const userId = Math.random().toString(36).substr(2, 9);
 
     setCurrentUserId(userId);
@@ -92,6 +99,9 @@ export default function EditorPage() {
       });
     } catch (error) {
       console.error("[Editor] Failed to join room:", error);
+    } finally {
+      joiningRef.current = false;
+      setIsJoining(false);
     }
   };
 
@@ -163,7 +173,7 @@ export default function EditorPage() {
   };
 
   if (!hasJoinedRoom) {
-    return <RoomSelector onJoinRoom={handleJoinRoom} />;
+    return <RoomSelector onJoinRoom={handleJoinRoom} isJoining={isJoining} />;
   }
 
   return (

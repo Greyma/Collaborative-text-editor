@@ -9,9 +9,10 @@ import { Label } from "@/components/ui/label"
 
 interface RoomSelectorProps {
   onJoinRoom: (roomId: string, userName: string) => void
+  isJoining?: boolean
 }
 
-export default function RoomSelector({ onJoinRoom }: RoomSelectorProps) {
+export default function RoomSelector({ onJoinRoom, isJoining = false }: RoomSelectorProps) {
   const [roomId, setRoomId] = useState("")
   const [userName, setUserName] = useState("")
   const [mode, setMode] = useState<"select" | "create" | "join">("select")
@@ -81,7 +82,7 @@ export default function RoomSelector({ onJoinRoom }: RoomSelectorProps) {
                   onClick={() => handleQuickJoin("public-room-1")}
                   variant="secondary"
                   className="w-full"
-                  disabled={!userName.trim()}
+                  disabled={isJoining || !userName.trim()}
                 >
                   Public Room #1
                 </Button>
@@ -89,7 +90,7 @@ export default function RoomSelector({ onJoinRoom }: RoomSelectorProps) {
                   onClick={() => handleQuickJoin("public-room-2")}
                   variant="secondary"
                   className="w-full"
-                  disabled={!userName.trim()}
+                  disabled={isJoining || !userName.trim()}
                 >
                   Public Room #2
                 </Button>
@@ -97,7 +98,7 @@ export default function RoomSelector({ onJoinRoom }: RoomSelectorProps) {
                   onClick={() => handleQuickJoin("public-room-3")}
                   variant="secondary"
                   className="w-full"
-                  disabled={!userName.trim()}
+                  disabled={isJoining || !userName.trim()}
                 >
                   Public Room #3
                 </Button>
@@ -133,8 +134,8 @@ export default function RoomSelector({ onJoinRoom }: RoomSelectorProps) {
                 <Button onClick={() => setMode("select")} variant="outline" className="w-full">
                   Back
                 </Button>
-                <Button onClick={handleJoinRoom} disabled={!userName.trim()} className="w-full">
-                  Create & Join
+                <Button onClick={handleJoinRoom} disabled={isJoining || !userName.trim()} className="w-full">
+                  {isJoining ? "Connecting..." : "Create & Join"}
                 </Button>
               </div>
             </div>
@@ -170,8 +171,8 @@ export default function RoomSelector({ onJoinRoom }: RoomSelectorProps) {
                 <Button onClick={() => setMode("select")} variant="outline" className="w-full">
                   Back
                 </Button>
-                <Button onClick={handleJoinRoom} disabled={!roomId.trim() || !userName.trim()} className="w-full">
-                  Join Room
+                <Button onClick={handleJoinRoom} disabled={isJoining || !roomId.trim() || !userName.trim()} className="w-full">
+                  {isJoining ? "Connecting..." : "Join Room"}
                 </Button>
               </div>
             </div>
