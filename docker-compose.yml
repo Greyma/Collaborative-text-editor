@@ -1,0 +1,34 @@
+name: collaborative
+
+x-hardening: &hardening
+  restart: unless-stopped
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+
+services:
+  web:
+    <<: *hardening
+    image: collaborative-editor:latest
+    build:
+      context: .
+      args:
+        NEXT_PUBLIC_SOCKET_URL: https://collaborative.ouahabi-benhenni.com
+    command: ["node_modules/.bin/next", "start", "-H", "0.0.0.0", "-p", "3000"]
+    ports:
+      - "127.0.0.1:8170:3000"
+
+  socket:
+    <<: *hardening
+    image: collaborative-editor:latest
+    depends_on: [web]
+    environment:
+      PORT: "3001"
+    # tsconfig targets the Next.js bundler; ts-node needs Node resolution instead.
+    command:
+      - node_modules/.bin/ts-node
+      - --transpile-only
+      - -O
+      - '{"module":"commonjs","moduleResolution":"node"}'
+      - server.ts
+    ports:
+      - "127.0.0.1:8171:3001"

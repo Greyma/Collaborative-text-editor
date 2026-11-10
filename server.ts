@@ -1,6 +1,3 @@
-// Backend Socket.IO server (run separately with: node server.ts)
-// Install dependencies: npm install express socket.io cors
-
 import express from "express"
 import { createServer } from "http"
 import { Server, type Socket } from "socket.io"
