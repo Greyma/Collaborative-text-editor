@@ -8,7 +8,7 @@ import UsersList from "@/components/users-list";
 import TypingIndicator from "@/components/typing-indicator";
 import RoomSelector from "@/components/room-selector";
 import { initializeSocket, sendOperation, onMessage, closeSocket, type Operation } from "@/lib/socket-manager";
-import { applyOperation, transformOperation, isValidOperation } from "@/lib/operational-transform";
+import { applyOperation, createOperations, transformOperation, isValidOperation } from "@/lib/operational-transform";
 import { getUserId } from "@/lib/user-id";
 import { Button } from "@/components/ui/button";
 
@@ -137,35 +137,8 @@ export default function EditorPage() {
 
   const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const newText = e.target.value;
-    const oldText = documentText;
-    const cursorPos = e.currentTarget.selectionStart;
 
-    let op: Operation | null = null;
-
-    if (newText.length > oldText.length) {
-      const diff = newText.length - oldText.length;
-      const insertedText = newText.substring(Math.max(0, cursorPos - diff), cursorPos);
-      op = {
-        id: `${currentUserId}-${Date.now()}`,
-        type: "insert",
-        position: cursorPos - insertedText.length,
-        content: insertedText,
-        timestamp: Date.now(),
-        userId: currentUserId,
-      };
-    } else if (newText.length < oldText.length) {
-      const deletedLength = oldText.length - newText.length;
-      op = {
-        id: `${currentUserId}-${Date.now()}`,
-        type: "delete",
-        position: cursorPos,
-        length: deletedLength,
-        timestamp: Date.now(),
-        userId: currentUserId,
-      };
-    }
-
-    if (op) {
+    for (const op of createOperations(documentText, newText, currentUserId)) {
       sendOperation(op);
       operationHistoryRef.current.push(op);
     }
