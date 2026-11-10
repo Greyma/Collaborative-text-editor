@@ -9,6 +9,7 @@ import TypingIndicator from "@/components/typing-indicator";
 import RoomSelector from "@/components/room-selector";
 import { initializeSocket, sendOperation, onMessage, closeSocket, type Operation } from "@/lib/socket-manager";
 import { applyOperation, transformOperation, isValidOperation } from "@/lib/operational-transform";
+import { getUserId } from "@/lib/user-id";
 import { Button } from "@/components/ui/button";
 
 interface User {
@@ -45,7 +46,7 @@ export default function EditorPage() {
     joiningRef.current = true;
     setIsJoining(true);
 
-    const userId = Math.random().toString(36).substr(2, 9);
+    const userId = getUserId(userName);
 
     setCurrentUserId(userId);
     setCurrentUserName(userName);

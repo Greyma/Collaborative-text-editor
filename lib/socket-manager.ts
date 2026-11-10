@@ -1,6 +1,8 @@
 import { io, Socket } from "socket.io-client";
 
 let socket: Socket | null = null;
+let instanceKey: string | null = null;
+let instanceReady: Promise<Socket> | null = null;
 
 export type Operation = {
   id: string;
@@ -14,10 +16,17 @@ export type Operation = {
 };
 
 export function initializeSocket(userId: string, userName: string, roomId: string): Promise<Socket> {
-  // A client owns a single connection: never leave a previous one alive in the room.
-  closeSocket();
+  // Singleton: the same user asking for the same room gets the existing instance back.
+  const key = `${roomId}:${userId}`;
+  if (socket && instanceKey === key && instanceReady) {
+    return instanceReady;
+  }
 
-  return new Promise((resolve, reject) => {
+  // A client owns a single connection: never leave a previous one alive in a room.
+  closeSocket();
+  instanceKey = key;
+
+  instanceReady = new Promise((resolve, reject) => {
     const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || "ws://localhost:3001";
 
     const newSocket = io(socketUrl, {
@@ -51,7 +60,7 @@ export function initializeSocket(userId: string, userName: string, roomId: strin
 
       // The join failed: stop retrying, otherwise it would join the room later on its own.
       newSocket.disconnect();
-      if (socket === newSocket) socket = null;
+      if (socket === newSocket) closeSocket();
       reject(error);
     });
 
@@ -59,6 +68,8 @@ export function initializeSocket(userId: string, userName: string, roomId: strin
       console.log("[Socket] Disconnected");
     });
   });
+
+  return instanceReady;
 }
 
 export function sendOperation(operation: Operation) {
@@ -97,6 +108,8 @@ export function closeSocket() {
     socket.disconnect();
     socket = null;
   }
+  instanceKey = null;
+  instanceReady = null;
 }
 
 export function isSocketConnected(): boolean {

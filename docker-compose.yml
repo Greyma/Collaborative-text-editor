@@ -23,6 +23,9 @@ services:
     depends_on: [web]
     environment:
       PORT: "3001"
+      DATABASE_PATH: /app/data/rooms.db
+    volumes:
+      - ./data:/app/data
     # tsconfig targets the Next.js bundler; ts-node needs Node resolution instead.
     command:
       - node_modules/.bin/ts-node
